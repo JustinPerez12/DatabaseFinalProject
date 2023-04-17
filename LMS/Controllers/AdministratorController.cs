@@ -163,11 +163,78 @@ namespace LMS.Controllers
         public IActionResult CreateClass(string subject, int number, string season, int year, DateTime start, DateTime end, string location, string instructor)
         {
             var allClasses =
-                from classes in db.Classes
-                select classes;
+                 from classes in db.Classes where classes.Season == season && classes.Year == year
+                 select classes;
 
-         
-            return Json(new { success = false});
+
+            //check if it occupoes the same location during the same time as another class
+            if (allClasses != null)
+            {
+                foreach (Class tempClass in allClasses)
+                {
+                    if (tempClass.Location == location)
+                    {
+                        if(tempClass.StartTime <= TimeOnly.FromDateTime(start) && TimeOnly.FromDateTime(start) < tempClass.EndTime)
+                        {
+                            return Json(new { success = false });
+                        }
+                        else if(tempClass.StartTime <= TimeOnly.FromDateTime(end) && TimeOnly.FromDateTime(end) < tempClass.EndTime)
+                        {
+                            return Json(new { success = false });
+                        }
+                    }
+                }
+            }
+            //class can be added because there arent any classes at all for this season and year
+            else
+            {
+                var currCourse =
+                 (from courses in db.Courses
+                  where courses.Department == subject && courses.Number == number
+                  select courses).First();
+
+                var newClass = new Class();
+                newClass.Year = (uint)year;
+                newClass.Season = season;
+                newClass.Listing = currCourse.CatalogId;
+                newClass.TaughtBy = instructor;
+                newClass.Location = location;
+                newClass.StartTime = TimeOnly.FromDateTime(start);
+                newClass.EndTime = TimeOnly.FromDateTime(end);
+                db.Classes.Add(newClass);
+                db.SaveChanges();
+            }
+
+            //query to see if class exists
+            var currClass =
+                (from courses in db.Courses where courses.Department == subject && courses.Number == number
+                join classes in db.Classes on season equals classes.Season where classes.Year == year && courses.CatalogId == classes.Listing
+                select classes).FirstOrDefault();
+
+            // class exists dont make it
+            if(currClass != null )
+            {
+                return Json(new { success = false });
+            }
+            else
+            {
+                var currCourse =
+                 (from courses in db.Courses
+                 where courses.Department == subject && courses.Number == number
+                 select courses).First();
+
+                var newClass = new Class();
+                newClass.Year = (uint)year;
+                newClass.Season = season;
+                newClass.Listing = currCourse.CatalogId;
+                newClass.TaughtBy = instructor;
+                newClass.Location = location;
+                newClass.StartTime = TimeOnly.FromDateTime(start);
+                newClass.EndTime = TimeOnly.FromDateTime(end);
+                db.Classes.Add(newClass);
+                db.SaveChanges();
+                return Json(new { success = true });
+            }
         }
 
 
