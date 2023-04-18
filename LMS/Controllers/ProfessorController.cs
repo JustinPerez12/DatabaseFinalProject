@@ -371,7 +371,7 @@ namespace LMS_CustomIdentity.Controllers
                                   {
                                       fname = students.FName,
                                       lname = students.LName,
-                                      uid = assignments.Due,
+                                      uid = students.UId,
                                       time = submissions.Time,
                                       score = submissions.Score,
                                   }
@@ -400,7 +400,28 @@ namespace LMS_CustomIdentity.Controllers
         /// <returns>A JSON object containing success = true/false</returns>
         public IActionResult GradeSubmission(string subject, int num, string season, int year, string category, string asgname, string uid, int score)
         {
-            return Json(new { success = false });
+            var submissionToGrade = (from classes in db.Classes
+                                  where classes.Season == season && classes.Year == year
+                                  join courses in db.Courses on classes.Listing equals courses.CatalogId
+                                  where courses.Number == num && courses.Department == subject
+                                  join categories in db.AssignmentCategories on classes.ClassId equals categories.InClass
+                                  where categories.Name == category
+                                  join assignments in db.Assignments on categories.CategoryId equals assignments.Category
+                                  where assignments.Name == asgname
+                                  join submissions in db.Submissions on assignments.AssignmentId equals submissions.Assignment
+                                  where submissions.Student == uid
+                                  select submissions
+                        ).FirstOrDefault();
+
+            if(submissionToGrade == null)
+            {
+                return Json(new { success = false });
+            }
+
+            submissionToGrade.Score = (uint?)score;
+            db.SaveChanges();
+
+            return Json(new { success = true });
         }
 
 
