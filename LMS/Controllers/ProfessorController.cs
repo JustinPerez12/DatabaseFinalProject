@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using LMS.Models.LMSModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -223,18 +224,18 @@ namespace LMS_CustomIdentity.Controllers
         public IActionResult GetAssignmentCategories(string subject, int num, string season, int year)
         {
             var theCategories = (from classes in db.Classes
-                                  where classes.Season == season && classes.Year == year
-                                  join courses in db.Courses on classes.Listing equals courses.CatalogId
-                                  where courses.Number == num && courses.Department == subject
-                                  join categories in db.AssignmentCategories on classes.ClassId equals categories.InClass
-                                  select new
-                                  {
-                                      name = categories.Name,
-                                      weight = categories.Weight,
-                                  }
+                                 where classes.Season == season && classes.Year == year
+                                 join courses in db.Courses on classes.Listing equals courses.CatalogId
+                                 where courses.Number == num && courses.Department == subject
+                                 join categories in db.AssignmentCategories on classes.ClassId equals categories.InClass
+                                 select new
+                                 {
+                                     name = categories.Name,
+                                     weight = categories.Weight,
+                                 }
                         );
 
-            if(theCategories == null || !theCategories.Any())
+            if (theCategories == null || !theCategories.Any())
             {
                 return Json(null);
             }
@@ -255,7 +256,35 @@ namespace LMS_CustomIdentity.Controllers
         /// <returns>A JSON object containing {success = true/false} </returns>
         public IActionResult CreateAssignmentCategory(string subject, int num, string season, int year, string category, int catweight)
         {
-            return Json(new { success = false });
+            // get class ID
+            var classId = (from classes in db.Classes
+                           where classes.Season == season && classes.Year == year
+                           join courses in db.Courses on classes.Listing equals courses.CatalogId
+                           where courses.Number == num && courses.Department == subject
+                           select classes.ClassId
+                        ).FirstOrDefault();
+
+            var existingCategory =
+                (from categories in db.AssignmentCategories
+                where categories.Name == category && categories.InClass == classId
+                select categories).FirstOrDefault();
+
+            if (existingCategory != null)
+            {
+                // assignment category already exists
+                return Json(new { success = false });
+            }
+            else
+            {
+                var newAssignmentCat = new AssignmentCategory();
+                newAssignmentCat.Name = category;
+                newAssignmentCat.Weight = (uint)catweight;
+                newAssignmentCat.InClass = classId;
+
+                db.AssignmentCategories.Add(newAssignmentCat);
+                db.SaveChanges();
+                return Json(new { success = true });
+            }
         }
 
         /// <summary>
@@ -273,7 +302,39 @@ namespace LMS_CustomIdentity.Controllers
         /// <returns>A JSON object containing success = true/false</returns>
         public IActionResult CreateAssignment(string subject, int num, string season, int year, string category, string asgname, int asgpoints, DateTime asgdue, string asgcontents)
         {
-            return Json(new { success = false });
+            // get category ID
+            var categoryId = (from classes in db.Classes
+                              where classes.Season == season && classes.Year == year
+                              join courses in db.Courses on classes.Listing equals courses.CatalogId
+                              where courses.Number == num && courses.Department == subject
+                              join categories in db.AssignmentCategories on classes.ClassId equals categories.InClass
+                              where categories.Name == category
+                              select categories.CategoryId
+                        ).FirstOrDefault();
+
+            var existingAssignment =
+                (from assignments in db.Assignments
+                where assignments.Name == asgname && assignments.Category == categoryId
+                select assignments).FirstOrDefault();
+
+            if (existingAssignment != null)
+            {
+                // assignment already exists
+                return Json(new { success = false });
+            }
+            else
+            {
+                var newAssignment = new Assignment();
+                newAssignment.Name = asgname;
+                newAssignment.Contents = asgcontents;
+                newAssignment.Due = asgdue;
+                newAssignment.MaxPoints = (uint)asgpoints;
+                newAssignment.Category = categoryId;
+
+                db.Assignments.Add(newAssignment);
+                db.SaveChanges();
+                return Json(new { success = true });
+            }
         }
 
 
@@ -316,7 +377,7 @@ namespace LMS_CustomIdentity.Controllers
                                   }
                         );
 
-            if(theSubmissions == null || !theSubmissions.Any())
+            if (theSubmissions == null || !theSubmissions.Any())
             {
                 return Json(null);
             }
@@ -370,7 +431,6 @@ namespace LMS_CustomIdentity.Controllers
 
             return Json(professorClasses.ToArray());
         }
-
 
 
         /*******End code to modify********/
