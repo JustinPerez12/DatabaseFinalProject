@@ -296,7 +296,32 @@ namespace LMS_CustomIdentity.Controllers
         /// <returns>The JSON array</returns>
         public IActionResult GetSubmissionsToAssignment(string subject, int num, string season, int year, string category, string asgname)
         {
-            return Json(null);
+            var theSubmissions = (from classes in db.Classes
+                                  where classes.Season == season && classes.Year == year
+                                  join courses in db.Courses on classes.Listing equals courses.CatalogId
+                                  where courses.Number == num && courses.Department == subject
+                                  join categories in db.AssignmentCategories on classes.ClassId equals categories.InClass
+                                  where categories.Name == category
+                                  join assignments in db.Assignments on categories.CategoryId equals assignments.Category
+                                  where assignments.Name == asgname
+                                  join submissions in db.Submissions on assignments.AssignmentId equals submissions.Assignment
+                                  join students in db.Students on submissions.Student equals students.UId
+                                  select new
+                                  {
+                                      fname = students.FName,
+                                      lname = students.LName,
+                                      uid = assignments.Due,
+                                      time = submissions.Time,
+                                      score = submissions.Score,
+                                  }
+                        );
+
+            if(theSubmissions == null || !theSubmissions.Any())
+            {
+                return Json(null);
+            }
+
+            return Json(theSubmissions.ToArray());
         }
 
 
