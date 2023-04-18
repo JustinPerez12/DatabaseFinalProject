@@ -76,11 +76,11 @@ namespace LMS.Controllers
         public IActionResult GetMyClasses(string uid)
         {
             var studentsClasses =
-                from enroll in db.Enrolleds
+                (from enroll in db.Enrolleds
                 join student in db.Students on enroll.Student equals uid
                 join classes in db.Classes on enroll.Class equals classes.ClassId
                 join courses in db.Courses on classes.Listing equals courses.CatalogId
-                select new {subject = courses.Department, number = courses.Number, name = courses.Name, season = classes.Season, year = classes.Year, grade = enroll.Grade == null ? "--" : enroll.Grade };
+                select new {subject = courses.Department, number = courses.Number, name = courses.Name, season = classes.Season, year = classes.Year, grade = enroll.Grade == null ? "--" : enroll.Grade }).Distinct();
 
             return Json(studentsClasses.ToArray());
         }
@@ -236,9 +236,72 @@ namespace LMS.Controllers
         /// <param name="uid">The uid of the student</param>
         /// <returns>A JSON object containing a single field called "gpa" with the number value</returns>
         public IActionResult GetGPA(string uid)
-        {    
+        {
+            var studentGrades =
+              (from enrolled in db.Enrolleds
+               where enrolled.Student == uid select enrolled.Grade).ToList();
 
-            return Json(null);
+            if (studentGrades == null || studentGrades.Count == 0)
+            {
+                return Json(new { gpa = 0.0 });
+            }
+
+            double credits = 0.0;
+            int gradeCount = 0;
+            foreach(var grade in studentGrades)
+            {
+                if(grade != "--")
+                {
+                    switch (grade)
+                    {
+                        case "A":
+                            credits += 4;
+                            break;
+                        case "A-":
+                            credits += 3.7;
+                            break;
+                        case "B+":
+                            credits += 3.3;
+                            break;
+                        case "B":
+                            credits += 3.0;
+                            break;
+                        case "B-":
+                            credits += 2.7;
+                            break;
+                        case "C+":
+                            credits += 2.3;
+                            break;
+                        case "C":
+                            credits += 2;
+                            break;
+                        case "C-":
+                            credits += 1.7;
+                            break;
+                        case "D+":
+                            credits += 1.3;
+                            break;
+                        case "D":
+                            credits += 1.0;
+                            break;
+                        case "D-":
+                            credits += 0.7;
+                            break;
+                        case "E":
+                            credits += 0;
+                            break;
+                    }
+                    gradeCount++;
+                }
+            }
+
+            if(gradeCount == 0)
+            {
+                return Json(new { gpa = 0.0 });
+            }
+            var studentsGPA = credits / gradeCount;
+
+            return Json(new { gpa = studentsGPA });
         }
                 
         /*******End code to modify********/
