@@ -66,7 +66,6 @@ namespace LMS.Controllers
                 db.SaveChanges();
                 return Json(new { success = true });
             }
-
         }
 
 
