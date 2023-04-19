@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -266,8 +267,8 @@ namespace LMS_CustomIdentity.Controllers
 
             var existingCategory =
                 (from categories in db.AssignmentCategories
-                where categories.Name == category && categories.InClass == classId
-                select categories).FirstOrDefault();
+                 where categories.Name == category && categories.InClass == classId
+                 select categories).FirstOrDefault();
 
             if (existingCategory != null)
             {
@@ -314,8 +315,8 @@ namespace LMS_CustomIdentity.Controllers
 
             var existingAssignment =
                 (from assignments in db.Assignments
-                where assignments.Name == asgname && assignments.Category == categoryId
-                select assignments).FirstOrDefault();
+                 where assignments.Name == asgname && assignments.Category == categoryId
+                 select assignments).FirstOrDefault();
 
             if (existingAssignment != null)
             {
@@ -333,7 +334,26 @@ namespace LMS_CustomIdentity.Controllers
 
                 db.Assignments.Add(newAssignment);
                 db.SaveChanges();
-                return Json(new { success = true });
+
+                var theStudents = (from classes in db.Classes
+                                   where classes.Season == season && classes.Year == year
+                                   join courses in db.Courses on classes.Listing equals courses.CatalogId
+                                   where courses.Number == num && courses.Department == subject
+                                   join enrolled in db.Enrolleds on classes.ClassId equals enrolled.Class
+                                   join students in db.Students on enrolled.Student equals students.UId
+                                   select new { uid = students.UId }
+                            ).ToList();
+
+                foreach(var student in theStudents)
+                {
+                    if(!CalculateGrade(season, year, num, subject, student.uid))
+                    {
+                        return Json(new { success = false });
+                    }
+                }
+
+                db.SaveChanges();
+                return Json(new { success =  true});
             }
         }
 
@@ -401,19 +421,19 @@ namespace LMS_CustomIdentity.Controllers
         public IActionResult GradeSubmission(string subject, int num, string season, int year, string category, string asgname, string uid, int score)
         {
             var submissionToGrade = (from classes in db.Classes
-                                  where classes.Season == season && classes.Year == year
-                                  join courses in db.Courses on classes.Listing equals courses.CatalogId
-                                  where courses.Number == num && courses.Department == subject
-                                  join categories in db.AssignmentCategories on classes.ClassId equals categories.InClass
-                                  where categories.Name == category
-                                  join assignments in db.Assignments on categories.CategoryId equals assignments.Category
-                                  where assignments.Name == asgname
-                                  join submissions in db.Submissions on assignments.AssignmentId equals submissions.Assignment
-                                  where submissions.Student == uid
-                                  select submissions
+                                     where classes.Season == season && classes.Year == year
+                                     join courses in db.Courses on classes.Listing equals courses.CatalogId
+                                     where courses.Number == num && courses.Department == subject
+                                     join categories in db.AssignmentCategories on classes.ClassId equals categories.InClass
+                                     where categories.Name == category
+                                     join assignments in db.Assignments on categories.CategoryId equals assignments.Category
+                                     where assignments.Name == asgname
+                                     join submissions in db.Submissions on assignments.AssignmentId equals submissions.Assignment
+                                     where submissions.Student == uid
+                                     select submissions
                         ).FirstOrDefault();
 
-            if(submissionToGrade == null)
+            if (submissionToGrade == null)
             {
                 return Json(new { success = false });
             }
@@ -421,7 +441,13 @@ namespace LMS_CustomIdentity.Controllers
             submissionToGrade.Score = (uint?)score;
             db.SaveChanges();
 
-            return Json(new { success = true });
+            if(CalculateGrade(season, year, num, subject, uid))
+            {
+                db.SaveChanges();
+                return Json(new { success =  true});
+            }
+
+            return Json(new { success =  false});
         }
 
 
@@ -455,6 +481,111 @@ namespace LMS_CustomIdentity.Controllers
 
 
         /*******End code to modify********/
+
+        private bool CalculateGrade(string season, int year, int num, string subject, string uid)
+        {
+            // get assingment categories with class and score and max score
+            var cats = (from classes in db.Classes
+                        where classes.Season == season && classes.Year == year
+                        join courses in db.Courses on classes.Listing equals courses.CatalogId
+                        where courses.Number == num && courses.Department == subject
+                        join categories in db.AssignmentCategories on classes.ClassId equals categories.InClass
+                        join assignments in db.Assignments on categories.CategoryId equals assignments.Category
+                        from submissions in db.Submissions.Where(sub => sub.Assignment == assignments.AssignmentId && sub.Student == uid).DefaultIfEmpty()
+                        select new { score = submissions.Score == null ? 0 : submissions.Score, maxScore = assignments.MaxPoints, weight = categories.Weight, catName = categories.Name, assignment = assignments })
+                          .GroupBy(g => new { g.catName, g.weight })
+                          .Select(group => new {
+                              categoryName = group.Key.catName,
+                              weight = group.Key.weight,
+                              assignments = group.Select(g => new {
+                                  assignmentName = g.assignment.Name,
+                                  maxScore = g.assignment.MaxPoints,
+                                  score = g.score
+                              }).ToArray()
+                          }).ToArray();
+
+            double totalWeight = cats.Sum(x => x.weight);
+            double totalScore = 0;
+            foreach (var cat in cats)
+            {
+                var weightPerc = cat.weight / totalWeight;
+
+                double myScore = (double)cat.assignments.Sum(x => x.score);
+                double maxScore = (double)cat.assignments.Sum(x => x.maxScore);
+
+                totalScore += (myScore / maxScore) * weightPerc;
+            }
+
+            totalScore *= 100;
+
+            string newGrade = "";
+            if (93 < totalScore)
+            {
+                newGrade = "A";
+            }
+            else if (90 < totalScore)
+            {
+                newGrade = "A-";
+            }
+            else if (87 < totalScore)
+            {
+                newGrade = "B+";
+            }
+            else if (83 < totalScore)
+            {
+                newGrade = "B";
+            }
+            else if (80 < totalScore)
+            {
+                newGrade = "B-";
+            }
+            else if (77 < totalScore)
+            {
+                newGrade = "C+";
+            }
+            else if (73 < totalScore)
+            {
+                newGrade = "C";
+            }
+            else if (70 < totalScore)
+            {
+                newGrade = "C-";
+            }
+            else if (67 < totalScore)
+            {
+                newGrade = "D+";
+            }
+            else if (63 < totalScore)
+            {
+                newGrade = "D";
+            }
+            else if (60 < totalScore)
+            {
+                newGrade = "D-";
+            }
+            else
+            {
+                newGrade = "E";
+            }
+
+            var studentsGrade =
+              (from enrolled in db.Enrolleds
+               where enrolled.Student == uid
+               join classes in db.Classes on enrolled.Class equals classes.ClassId
+               where classes.Season == season && classes.Year == year
+               join courses in db.Courses on classes.Listing equals courses.CatalogId
+               where courses.Number == num && courses.Department == subject
+               select enrolled).FirstOrDefault();
+
+            if (studentsGrade == null)
+            {
+                return false;
+            }
+
+
+            studentsGrade.Grade = newGrade;
+            return true;
+        }
     }
 }
 

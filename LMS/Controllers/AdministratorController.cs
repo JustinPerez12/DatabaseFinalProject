@@ -173,11 +173,11 @@ namespace LMS.Controllers
                 {
                     if (tempClass.Location == location)
                     {
-                        if(tempClass.StartTime <= TimeOnly.FromDateTime(start) && TimeOnly.FromDateTime(start) < tempClass.EndTime)
+                        if(tempClass.StartTime <= TimeOnly.FromDateTime(start) && TimeOnly.FromDateTime(start) <= tempClass.EndTime)
                         {
                             return Json(new { success = false });
                         }
-                        else if(tempClass.StartTime <= TimeOnly.FromDateTime(end) && TimeOnly.FromDateTime(end) < tempClass.EndTime)
+                        else if(tempClass.StartTime <= TimeOnly.FromDateTime(end) && TimeOnly.FromDateTime(end) <= tempClass.EndTime)
                         {
                             return Json(new { success = false });
                         }

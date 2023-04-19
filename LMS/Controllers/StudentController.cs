@@ -197,6 +197,7 @@ namespace LMS.Controllers
                join classes in db.Classes on courses.CatalogId equals classes.Listing
                where classes.Season == season && classes.Year == year
                join enrolled in db.Enrolleds on classes.ClassId equals enrolled.Class
+               where enrolled.Student == uid
                select enrolled).FirstOrDefault();
 
             if(isEnrolled != null)
